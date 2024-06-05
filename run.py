@@ -5,7 +5,6 @@ import logging
 import pika
 import json
 from datetime import datetime
-from app.encryption import decrypt_data
 from app.models import User
 from app.conjob import send_message
 

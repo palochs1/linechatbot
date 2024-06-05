@@ -4,7 +4,6 @@ import schedule
 import time as t
 from app import db, create_app
 from app.models import User
-from app.encryption import decrypt_data
 import pika
 import json
 
@@ -48,27 +47,33 @@ def publish_task(task):
         routing_key='task_queue',
         body=json.dumps(message),
         properties=pika.BasicProperties(
-            delivery_mode=2,  # make message persistent
+            delivery_mode=2,  
         ))
     connection.close()
 
 def check_and_send_notifications():
     current_time = datetime.now().time()
     current_date = datetime.now().date()
+    
     with app.app_context():
         tasks = User.query.filter_by(date=current_date).all()
         for task in tasks:
             task_time = datetime.strptime(task.time, "%H:%M").time()
             notification_time = (datetime.combine(datetime.today(), task_time) - timedelta(minutes=15)).time()
+            print(f"Checking task {task.id} for customer {task.customer_id} at {current_time}")
             if notification_time <= current_time < task_time:
-                try:
-                    publish_task(task)
-                    if task.key_send == "SEND_MESSAGE_KEY":  
-                        send_message(task.customer_id, task.task)
-                        task.key_send = "MESSAGE_SENT"
-                        db.session.commit()
-                except Exception as e:
-                    print(f"Error publishing task {task.id}: {e}")
+                if task.key_send != "MESSAGE_SENT":
+                    try:
+                        publish_task(task)
+                        if task.key_send == "SEND_MESSAGE_KEY":  
+                            send_message(task.customer_id, task.task)
+                            task.key_send = "MESSAGE_SENT"
+                            db.session.commit()
+                            print(f"Message sent for task {task.id} to customer {task.customer_id}")
+                    except Exception as e:
+                        print(f"Error publishing task {task.id}: {e}")
+                else:
+                    print(f"Notification already sent for task {task.id}")
 
 def schedule_notifications():
     schedule.every().minute.do(check_and_send_notifications)
